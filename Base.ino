@@ -1,14 +1,16 @@
 /**
  *   University of Washington
- *   ECE/CSE 474,  5/19/2021
+ *   ECE/CSE 474,  6/9/2021
  *   
- *   @file   final_project.ino
+ *   @file   base.ino
  *   @author    Dylan Hylander, Trevor Garrood
  *   @date      9-June-2021
- *   @brief   EE 474 Lab 4 Final Project
+ *   @brief   EE 474 Lab 4 Turn-in 4.1/2 and Final Project
  *   
- *  This file creates a banking device using a Membrane switch module and LCD display as well as a servo for the user.
- *  
+ *  This file combines teh required lab 4.1 and 4.2 demo portions of Lab 4 and well as 
+ *  creating a final project that is a rudimentary ATM with security functions. It creates a banking device 
+ *  using a Membrane switch module, seven segment display, LCD display, and a servo for the user to utilize.
+ *  The functions the user has access to are depositing money, withdrawing money, changing the password to the ATM, and exiting the ATM.  
  */
 
 // --------- Define Statements --------
@@ -31,14 +33,19 @@
 #define CLR_0 ~(1<<0)
 #define CLEAR 0b00000000
 #define DELAY_TASK_2 1000
+#define DELAY_100 100
+#define DELAY_150 150
+#define DELAY_200 200
+#define DELAY_250 250
+#define DELAY_1500 1500
 
 // Music note defines
-#define NOTE_d4 6802 // 293 Hz
-#define NOTE_e4 6079 // 329 Hz
-#define NOTE_c4 7662 // 261 Hz
-#define NOTE_c3 15385 // 130 Hz
-#define NOTE_g3 10204 // 196 Hz
-#define NO_NOTE 0 // pause between notes
+#define NOTE_d4 6802 ///< 293 Hz
+#define NOTE_e4 6079 ///< 329 Hz
+#define NOTE_c4 7662 ///< 261 Hz
+#define NOTE_c3 15385 ///< 130 Hz
+#define NOTE_g3 10204 ///< 196 Hz
+#define NO_NOTE 0 ///< pause between notes
 #define D4 293 // 293 Hz
 #define E4 329 // 329 Hz
 #define C4 261 // 261 Hz
@@ -72,25 +79,26 @@
 #define EXIT_MENU_STATE 11
 #define EXIT_STATE 12
 #define IDLE_STATE 13
+#define PIN_SERVO 53
 
 // FFT Defines
-#define ARRAY_SIZE 64  // Size of random int array
-#define SERIAL_BITS 19200  // number of bits per second for serial communication
-#define TOTAL_FFT 5  // total number of FFT's to calculate
+#define ARRAY_SIZE 128  ///< Size of random int array
+#define SERIAL_BITS 19200  ///< number of bits per second for serial communication
+#define TOTAL_FFT 5  ///< total number of FFT's to calculate
 
 // --------------- Variables --------------------
 
 // Keypad Variables
-const byte ROWS = 4; //four rows
-const byte COLS = 4; //four columns
+const byte ROWS = 4; ///< four rows for the beypad
+const byte COLS = 4; ///< four columns for the beypad
 char keys[ROWS][COLS] = {
   {'1','2','3','A'},
   {'4','5','6','B'},
   {'7','8','9','C'},
   {'*','0','#','D'}
 };
-byte rowPins[ROWS] = {25, 27, 29, 31}; //connect to the row pinouts of the keypad
-byte colPins[COLS] = {33, 35, 37, 39}; //connect to the column pinouts of the keypad
+byte rowPins[ROWS] = {25, 27, 29, 31}; ///< connect to the row pinouts of the keypad
+byte colPins[COLS] = {33, 35, 37, 39}; ///< connect to the column pinouts of the keypad
 Keypad keypad = Keypad( makeKeymap(keys), rowPins, colPins, ROWS, COLS );
 
 // ATM Variables
@@ -107,8 +115,7 @@ int depositLoc = 0;
 String withdrawAmount = "";
 int withdrawLoc = 0;
 
-// LCD Variables
-const int rs = 32, en = 30, d4 = 28, d5 = 26, d6 = 24, d7 = 22;
+const int rs = 32, en = 30, d4 = 28, d5 = 26, d6 = 24, d7 = 22;  ///< LCD Variables
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 // Seven Segment Variables
@@ -123,9 +130,9 @@ byte seven_seg_digits[10][7] = { { 1,1,1,1,1,1,0 },  // = 0
                                  { 1,1,1,1,1,1,1 },  // = 8
                                  { 1,1,1,0,0,1,1 }   // = 9
                                };
-byte digitPins[] = {14, 11, 12, 13}; // D1, D2, D3, D4
-byte segmentPins[] = {9, 2, 3, 5, 6, 8, 7, 4}; // A, B, C, D, E, F, G, DP
-byte numberArray[] = {0, 0, 0, 0}; // Start at 0000
+byte digitPins[] = {14, 11, 12, 13}; ///< D1, D2, D3, D4
+byte segmentPins[] = {9, 2, 3, 5, 6, 8, 7, 4}; ///< A, B, C, D, E, F, G, DP
+byte numberArray[] = {0, 0, 0, 0}; ///< Start at 0000
 
 // ISR Variables
 char TCNT2init= 130;
@@ -138,16 +145,16 @@ uint8_t exponent;
 const double startFrequency = 2;
 const double stopFrequency = 16.4;
 const double step_size = 0.1;
-double vReal[ARRAY_SIZE];
-double vImag[ARRAY_SIZE];
+double vReal[ARRAY_SIZE];  ///< real array for FFT
+double vImag[ARRAY_SIZE];  ///< imaginary array for FFT
 
-arduinoFFT FFT = arduinoFFT(); /* Create FFT object */
-double (*arrayPtr)[ARRAY_SIZE];  // pointer to random int array
-long *timePtr;  // pointer to avg time for a FFT
+arduinoFFT FFT = arduinoFFT(); ///< Create FFT object
+double (*arrayPtr)[ARRAY_SIZE];  ///< pointer to random int array
+long *timePtr;  ///< pointer to avg time for a FFT
 
-int numBlinks = 0;  // number of blink cycles
-int numSongs = 0;  // number of song cycles
-int numFFT = 0;  // number of FFT calculations 
+int numBlinks = 0;  ///< number of blink cycles
+int numSongs = 0;  ///< number of song cycles
+int numFFT = 0;  ///< number of FFT calculations 
 
 //  declare the Queue handles
 static QueueHandle_t    queue1;
@@ -209,32 +216,34 @@ void setup() {
   // Set FFT array values to random integers
   for(int i = 0 ; i < ARRAY_SIZE ; i++ ) {
     d[i] = rand();
-    // Serial.print("i: ");  Serial.print(i);  Serial.print("   num: ");  Serial.println(d[i]);
+    // Serial.print("i: ");  Serial.print(i);  Serial.print("   num: ");  Serial.println(d[i]);  // check if random
   }
-
+  // FFT exponent initialization
   exponent = FFT.Exponent(ARRAY_SIZE);
 
   //  Set up Queues
   queue1 = xQueueCreate(ARRAY_SIZE, sizeof(double));
   queue2 = xQueueCreate(ARRAY_SIZE, sizeof(double));
     
-  // Now set up two tasks to run independently.
+  // Create task for blinking an LED with a stack size of 400 and priority of 3.
   xTaskCreate(
     TaskBlink
     ,  "Blink"   // A name just for humans
-    ,  128  // This stack size can be checked & adjusted by reading the Stack Highwater
+    ,  400  // This stack size can be checked & adjusted by reading the Stack Highwater
     ,  NULL
-    ,  1  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
+    ,  3  // Priority, with 3 (configMAX_PRIORITIES - 1) being the highest, and 0 being the lowest.
     ,  NULL );
 
+  // Create task for playing a song with a stack size of 600 and priority of 2.
   xTaskCreate(
     TaskSongPlay
     ,  "SongPlay"
-    ,  128  // Stack size
+    ,  600  // Stack size
     ,  NULL
-    ,  1  // Priority
+    ,  2  // Priority
     ,  NULL );
 
+  // Create task for an I/O keypad with a stack size of 800 and priority of 1.
   xTaskCreate(
     TaskKeypad
     ,  "Keypad"
@@ -243,6 +252,7 @@ void setup() {
     ,  1  // Priority
     ,  NULL );
 
+  // Create task for moving a servo with a stack size of 128 and priority of 1.
   xTaskCreate(
     TaskServo
     ,  "Servo"
@@ -251,25 +261,25 @@ void setup() {
     ,  1  // Priority
     ,  NULL );
 
+  // Create task for setting up the FFT with a stack size of 1400 and priority of 0.
   xTaskCreate(
     TaskSetupFFT
     ,  "SetupFFT"
-    ,  2000  // Stack size
+    ,  1400  // Stack size
     ,  NULL
     ,  0  // Priority
     ,  NULL );
 
+  // Create task for running the FFT with a stack size of 1400 and priority of 0.
   xTaskCreate(
     TaskFFT
     ,  "FFT"
-    ,  2000  // Stack size
+    ,  1400  // Stack size
     ,  NULL
     ,  0  // Priority
     ,  NULL );
 
-  delay(500);
-  
-  vTaskStartScheduler();
+  vTaskStartScheduler();   // Start task scheduler
 }
 
 /**
@@ -301,9 +311,9 @@ void TaskBlink(void *pvParameters) {
   for (;;) // A Task shall never return or exit.
   {
     digitalWrite(47, HIGH);   // turn the LED on (HIGH is the voltage level)
-    vTaskDelay( 100 / portTICK_PERIOD_MS ); // wait for 100ms
+    vTaskDelay( DELAY_100 / portTICK_PERIOD_MS ); // wait for 100ms
     digitalWrite(47, LOW);    // turn the LED off by making the voltage LOW
-    vTaskDelay( 200 / portTICK_PERIOD_MS ); // wait for 200ms
+    vTaskDelay( DELAY_200 / portTICK_PERIOD_MS ); // wait for 200ms
   }
 }
 
@@ -335,19 +345,19 @@ void TaskSongPlay(void *pvParameters) {
   TCCR5A |= 0b01000000;
   for (;;) {
     OCR5A = NOTE_d4 / 2;
-    vTaskDelay( DELAY_TASK_2 / portTICK_PERIOD_MS ); // wait for 200ms
+    vTaskDelay( DELAY_TASK_2 / portTICK_PERIOD_MS ); // wait for 1s
     OCR5A = NOTE_e4 / 2;
-    vTaskDelay( DELAY_TASK_2 / portTICK_PERIOD_MS ); // wait for 200ms
+    vTaskDelay( DELAY_TASK_2 / portTICK_PERIOD_MS ); // wait for 1s
     OCR5A = NOTE_c4 / 2;
-    vTaskDelay( DELAY_TASK_2 / portTICK_PERIOD_MS ); // wait for 200ms
+    vTaskDelay( DELAY_TASK_2 / portTICK_PERIOD_MS ); // wait for 1sms
     OCR5A = NOTE_c3;
-    vTaskDelay( DELAY_TASK_2 / portTICK_PERIOD_MS ); // wait for 200ms
+    vTaskDelay( DELAY_TASK_2 / portTICK_PERIOD_MS ); // wait for 1ss
     OCR5A = NOTE_g3;
-    vTaskDelay( (DELAY_TASK_2 * 4) / portTICK_PERIOD_MS ); // wait for 200ms
+    vTaskDelay( (DELAY_TASK_2 * 4) / portTICK_PERIOD_MS ); // wait for 4s
     OCR5A = NO_NOTE;
-    vTaskDelay( (DELAY_TASK_2 * 1.5) / portTICK_PERIOD_MS ); // wait for 200ms
+    vTaskDelay( (DELAY_TASK_2 * 1.5) / portTICK_PERIOD_MS ); // wait for 1.5s
     taskTwoPlays++;
-    if (taskTwoPlays == 3) {
+    if (taskTwoPlays == 3) {  // Stop after playing theme 3 times
       currentState = INIT_STATE;
       vTaskSuspend(NULL);
     }
@@ -369,40 +379,40 @@ void TaskKeypad(void *pvParameters) {
 
   for (;;) {
     char key = keypad.getKey(); // Read the key
-    if (currentState == IDLE_STATE) {
+    if (currentState == IDLE_STATE) {  // if idle, do nothing
       
-    } else if (currentState == INIT_STATE) {
+    } else if (currentState == INIT_STATE) {  // if initialized, ask for password
       lcd.print("Enter Pswd: ");
       currentState = PSWD_IN_STATE;
-    } else if (currentState == PSWD_IN_STATE) {
+    } else if (currentState == PSWD_IN_STATE) {  // if password types, checks if it's correct
       if (key){
         lcd.print("*");
         if (password[keyInputCount] != (key - '0')) {
           correctPassword = false;
         }
         keyInputCount++;
-        vTaskDelay(250 / portTICK_PERIOD_MS);
+        vTaskDelay(DELAY_250 / portTICK_PERIOD_MS);
         if (keyInputCount == 4) {
           lcd.clear();
-          if (correctPassword) {
+          if (correctPassword) {  // if correct password, changes state to menu
             lcd.print("Welcome");
             vTaskDelay(1000 / portTICK_PERIOD_MS);
             currentState = MENU_STATE;
           } else {
-            lcd.print("Incorrect Pswd");
+            lcd.print("Incorrect Pswd");  // if wrong password, resets back to beginning
             vTaskDelay(1000 / portTICK_PERIOD_MS);
             currentState = RESET_STATE;
           }
         }
       }
-    } else if (currentState == MENU_STATE) {
+    } else if (currentState == MENU_STATE) {  // if currently in menu state, asks for deposit or withdrawl or exit
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print("A) Add B) Wthdrw");
       lcd.setCursor(0, 1);
       lcd.print("C) Pswd D) Exit");
       currentState = SELECT_STATE;
-    } else if (currentState == SELECT_STATE) {
+    } else if (currentState == SELECT_STATE) {  // if in selecting state, checks for which state to enter next
       if (key) {
         if (key == 'A') {
           currentState = DEPOSIT_MENU_STATE;
@@ -419,11 +429,11 @@ void TaskKeypad(void *pvParameters) {
           currentState = MENU_STATE;
         }
       }
-    } else if (currentState == DEPOSIT_MENU_STATE) {
+    } else if (currentState == DEPOSIT_MENU_STATE) {  // if in deposit menu state, prints out deposit:
       lcd.clear();
       lcd.print("Deposit: ");
       currentState = DEPOSIT_STATE;
-    } else if (currentState == DEPOSIT_STATE) {
+    } else if (currentState == DEPOSIT_STATE) {  // if in deposit state, adds input to current balance
       if (key){
         lcd.print(key);
         if (depositLoc == 6 || key == '#') {
@@ -445,11 +455,11 @@ void TaskKeypad(void *pvParameters) {
           depositLoc++;
         }
       }
-    } else if (currentState == WTHDRW_MENU_STATE) {
+    } else if (currentState == WTHDRW_MENU_STATE) {  // if in withdraw menu state, prints withdraw:
       lcd.clear();
       lcd.print("Withdraw: ");
       currentState = WTHDRW_STATE;
-    } else if (currentState == WTHDRW_STATE) {
+    } else if (currentState == WTHDRW_STATE) {  // if in withdraw state, subtracts given amount from balance
       if (key){
         lcd.print(key);
         if (withdrawLoc == 6 || key == '#') {
@@ -476,11 +486,11 @@ void TaskKeypad(void *pvParameters) {
           withdrawLoc++;
         }
       }
-    } else if (currentState == PSWD_MENU_STATE) {
+    } else if (currentState == PSWD_MENU_STATE) {  // if in password menu state, prints out new pswd:
       lcd.clear();
       lcd.print("New Pswd: ");
       currentState = PSWD_STATE;
-    } else if (currentState == PSWD_STATE) {
+    } else if (currentState == PSWD_STATE) {  // if in password state, changes the password to given input and gives exit menu
       if (key){
         if (passwordLoc < 4) {
           lcd.print(key);
@@ -494,14 +504,14 @@ void TaskKeypad(void *pvParameters) {
          passwordLoc = 0;
         }
       }
-    } else if (currentState == EXIT_MENU_STATE) {
+    } else if (currentState == EXIT_MENU_STATE) {  // if in exit menu state, asks if should exit menu
       lcd.clear();
       lcd.setCursor(0, 0);
       lcd.print("A) Continue");
       lcd.setCursor(0, 1);
       lcd.print("B) Exit");
       currentState = EXIT_STATE;
-    } else if (currentState == EXIT_STATE) {
+    } else if (currentState == EXIT_STATE) {  // if in exit state, checks given input and either goes to menu or resets
       if (key){
         if (key == 'A') {
           currentState = MENU_STATE;
@@ -509,7 +519,7 @@ void TaskKeypad(void *pvParameters) {
           currentState = RESET_STATE;
         }
       }
-    } else if (currentState == RESET_STATE) {
+    } else if (currentState == RESET_STATE) {  // if in reset state, sets deposit/withdraw to 0 and goes to init state
       lcd.clear();
       keyInputCount = 0;
       correctPassword = true;
@@ -533,23 +543,27 @@ void TaskKeypad(void *pvParameters) {
  */
 void TaskServo(void *pvParameters) {
   int pos = 0;
-  pinMode(53, OUTPUT);
+  pinMode(PIN_SERVO, OUTPUT);
   for (;;) {
     if (deposit || withdrawal) {
-      digitalWrite(53, HIGH);
-      vTaskDelay(1500 / portTICK_PERIOD_MS);
-      digitalWrite(53, LOW);
-      vTaskDelay(1500 / portTICK_PERIOD_MS);
+      digitalWrite(PIN_SERVO, HIGH);
+      vTaskDelay(DELAY_1500 / portTICK_PERIOD_MS);
+      digitalWrite(PIN_SERVO, LOW);
+      vTaskDelay(DELAY_1500 / portTICK_PERIOD_MS);
       deposit = false;
       withdrawal = false;
     }
   }
 }
 
-/*
-  SetupFFT
-  Creates an array of random integers and a FreeRTOS Queue
-*/
+/**
+ * void TaskSetupFFT(void *pvParameters)
+ * @brief Creates an array of random integers and a FreeRTOS Queue
+ * @author Trevor Garrood, Dylan Hylander
+ * @param {void *} pvParameters - parameters of the task
+ * 
+ * Uses queues to keep track of data in the random int array or the time taken for FFT calculations
+ */
 void TaskSetupFFT(void *pvParameters) {
   
   // put into queue
@@ -562,14 +576,18 @@ void TaskSetupFFT(void *pvParameters) {
 //  Serial.print("Average Wall Clock Time Per FFT: ");  Serial.println(avgTime);  // Prints time to calculate FFT's
 }
 
-/*
-  FFT
-  Caclculates 5 FFT's for an array of random integers from a FreeRTOS Queue
-*/
+/**
+ * void TaskFFT(void *pvParameters)
+ * @brief Caclculates 5 FFT's for an array of random integers from a FreeRTOS Queue
+ * @author Trevor Garrood, Dylan Hylander
+ * @param {void *} pvParameters - parameters of the task
+ * 
+ * Uses the random int data in the queue to calcuate FFT's 5 different times an find the average of them.
+ */
 void TaskFFT(void *pvParameters) {
   vTaskDelay( 200 / portTICK_PERIOD_MS ); // wait for 200 ms
   TickTypet xStart, xEnd, xDifference;
-  xStart = xTaskGetTickCount();
+  xStart = xTaskGetTickCount();  // initial tick count
   for (;;) {
     numFFT++;  // number of FFT's calculated
     xQueueReceive(queue1, &arrayPtr, 0);
@@ -583,16 +601,17 @@ void TaskFFT(void *pvParameters) {
           vReal[i] = *arrayPtr[i];
           vImag[i] = 0; //Reset the imaginary values vector for each new frequency
         }
+        // FFT calculations
         FFT.Windowing(vReal, ARRAY_SIZE, FFT_WIN_TYP_HAMMING, FFT_FORWARD);  // Weigh data
         FFT.Compute(vReal, vImag, ARRAY_SIZE, exponent, FFT_FORWARD); // Compute FFT 
         FFT.ComplexToMagnitude(vReal, vImag, ARRAY_SIZE); // Compute magnitudes
         double x = FFT.MajorPeak(vReal, ARRAY_SIZE, sampling);
       }
     }
-    xEnd = xTaskGetTickCount();
+    xEnd = xTaskGetTickCount();  // end tick count
     xDifference = xEnd - xStart;
     timePtr = &xDifference;
-    long avgTime = xDifference / TOTAL_FFT;
+    long avgTime = xDifference / TOTAL_FFT;  // average time per FFT
     Serial.print("Average Wall Clock Time Per FFT: ");  Serial.println(avgTime);  // Prints time to calculate FFT's
     xQueueSendToBack(queue2, timePtr, 0);
   }
@@ -608,13 +627,15 @@ ISR(TIMER2_OVF_vect) {
   TCNT2 = TCNT2init;
   static int digitPos;
   static int state;
+  // changes balance into an array
   intToNumber(balance, numberArray);
   if (isrCount == 0) {
     if (++digitPos >= 4) {
       digitPos = 0;
     }
-    showDigit(numberArray[digitPos], digitsPos[digitPos]);
+    showDigit(numberArray[digitPos], digitsPos[digitPos]);  // checks digit position
   }
+  // hides all digits if isr count is 3
   if (isrCount == 3) {
     hideDigit(DIGITAL_PIN_ZERO);
     hideDigit(DIGITAL_PIN_ONE);
