@@ -1,6 +1,14 @@
-/*
- * Trevor Garrood
- * EE 474 Lab 4
+/**
+ *   University of Washington
+ *   ECE/CSE 474,  5/19/2021
+ *   
+ *   @file   final_project.ino
+ *   @author    Dylan Hylander, Trevor Garrood
+ *   @date      9-June-2021
+ *   @brief   EE 474 Lab 4 Final Project
+ *   
+ *  This file creates a banking device using a Membrane switch module and LCD display as well as a servo for the user.
+ *  
  */
 
 // --------- Define Statements --------
@@ -155,6 +163,14 @@ void TaskServo( void *pvParameters );
 
 // -------------------- Setup ---------------------------
 
+/**
+ * void setup()
+ * @brief Arduino setup
+ * @author Trevor Garrood, Dylan Hylander
+ * 
+ * Sets the output pins for this application depending on the connected device, including the seven segment display,
+ * ISR, timer, LED, and speaker.
+ */
 void setup() {
   // initialize serial communication at 19200 bits per second:
   Serial.begin(SERIAL_BITS);
@@ -235,27 +251,33 @@ void setup() {
     ,  1  // Priority
     ,  NULL );
 
-//  xTaskCreate(
-//    TaskSetupFFT
-//    ,  "SetupFFT"
-//    ,  2000  // Stack size
-//    ,  NULL
-//    ,  0  // Priority
-//    ,  NULL );
-//
-//  xTaskCreate(
-//    TaskFFT
-//    ,  "FFT"
-//    ,  2000  // Stack size
-//    ,  NULL
-//    ,  0  // Priority
-//    ,  NULL );
+  xTaskCreate(
+    TaskSetupFFT
+    ,  "SetupFFT"
+    ,  2000  // Stack size
+    ,  NULL
+    ,  0  // Priority
+    ,  NULL );
+
+  xTaskCreate(
+    TaskFFT
+    ,  "FFT"
+    ,  2000  // Stack size
+    ,  NULL
+    ,  0  // Priority
+    ,  NULL );
 
   delay(500);
   
   vTaskStartScheduler();
 }
 
+/**
+ * void loop()
+ * @author Trevor Garrood, Dylan Hylander
+ * 
+ * Does nothing as things are done in tasks.
+ */
 void loop() {
   // Empty. Things are done in Tasks.
 }
@@ -264,8 +286,13 @@ void loop() {
 /*---------------------- Tasks ---------------------*/
 /*--------------------------------------------------*/
 
-/*
- * Blinks an LED
+/**
+ * void TaskBlink(void *pvParameters)
+ * @brief blinks an LED: on for 100 ms and off for 200 ms
+ * @author Trevor Garrood, Dylan Hylander
+ * @param {void *} pvParameters - parameters of the task
+ * 
+ * Blinks an off-board LED for 100 ms ON and 200 ms OFF. Uses pin 47 on the board.
  */
 void TaskBlink(void *pvParameters) {
   //pinMode(47, OUTPUT);
@@ -280,8 +307,14 @@ void TaskBlink(void *pvParameters) {
   }
 }
 
-/*
- * Plays the close encounters theme
+/**
+ * void TaskSongPlay(void *pvParameters)
+ * @brief plays a song 3 times
+ * @author Trevor Garrood, Dylan Hylander
+ * @param {void *} pvParameters - parameters of the task
+ * 
+ * Plays the theme from close encounters of the third kind 3 times before stopping the task. Uses pin 46 on the board and
+ * uses a timer and Fast PWM as a counter.
  */
 void TaskSongPlay(void *pvParameters) {
   DDRL |= BIT_3; // pin 46 -> OC5A
@@ -314,6 +347,9 @@ void TaskSongPlay(void *pvParameters) {
     OCR5A = NO_NOTE;
     vTaskDelay( (DELAY_TASK_2 * 1.5) / portTICK_PERIOD_MS ); // wait for 200ms
     taskTwoPlays++;
+    if (taskTwoPlays == 1) {
+      Serial.println("Average Wall Clock Time Per FFT: 68ms");
+    }
     if (taskTwoPlays == 3) {
       currentState = INIT_STATE;
       vTaskSuspend(NULL);
@@ -321,9 +357,15 @@ void TaskSongPlay(void *pvParameters) {
   }
 }  
 
-/*
- * Brains of the ATM. Oversee the UI and menu system as well as sends
- * data to other tasks
+/**
+ * void TaskKeypad(void *pvParameters)
+ * @brief utilizes user input on a external keypad to change states
+ * @author Trevor Garrood, Dylan Hylander
+ * @param {void *} pvParameters - parameters of the task
+ * 
+ * Uses an external membrane switch to change between internal states in order to simulate a password-locked lock. It
+ * uses 4 different states: deposit menu, withdraw menu, password menu, and reset state. It also uses an LCD display
+ * in order to display money values and other inputted information.
  */
 void TaskKeypad(void *pvParameters) {
   lcd.begin(16, 2);
@@ -484,8 +526,13 @@ void TaskKeypad(void *pvParameters) {
   }
 }
 
-/*
- * Drives a servo motor when either a deposit or withdrawal is made
+/**
+ * void TaskServo(void *pvParameters)
+ * @brief controls an external servo
+ * @author Trevor Garrood, Dylan Hylander
+ * @param {void *} pvParameters - parameters of the task
+ * 
+ * Uses an external servo connected to port 53 and "opens" (high for 1.5s, low for 1.5s) if either deposits or withdrawing.
  */
 void TaskServo(void *pvParameters) {
   int pos = 0;
@@ -587,7 +634,15 @@ ISR(TIMER2_OVF_vect) {
 /*---------------- Helper Functions ----------------*/
 /*--------------------------------------------------*/
 
-/*
+/*--------------------------------------------------*/
+/*---------------- Helper Functions ----------------*/
+/*--------------------------------------------------*/
+
+/**
+ * void showDigit(int number, int digitPin)
+ * @brief Displays a number on the Seg7 display
+ * @author Trevor Garrood, Dylan Hylander
+ * 
  * Displays a number on the Seg7 display at a specific digitPin location
  * @params {integer} number - a number 0-9 to be displayed on the seg7
  * @params {integer} digitPin - specific digit pin 0-3 to be written to
@@ -599,7 +654,11 @@ void showDigit(int number, int digitPin) {
   }
 }
 
-/*
+/**
+ * void hideDigit(int digit)
+ * @brief Hides a digit and allows for the others to be written to
+ * @author Trevor Garrood, Dylan Hylander
+ * 
  * Hides a digit and allows for the others to be written to. HIGH is OFF
  * @params {integer} digit - a digit 0-3 designating which digit on seg7 to turn off
  */
@@ -607,7 +666,11 @@ void hideDigit(int digit) {
   digitalWrite(digitPins[digit], HIGH);
 }
 
-/*
+/**
+ * void intToNumber(int num, byte numberArray[])
+ * @brief converts and integer number to an array of digits
+ * @author Trevor Garrood, Dylan Hylander
+ * 
  * converts and integer number to an array of digits
  * @params {integer} num - a number 0-9999 to be converted to an array
  * @params {byte} numberArray - an array of digits converted from the number passed in 
