@@ -347,9 +347,6 @@ void TaskSongPlay(void *pvParameters) {
     OCR5A = NO_NOTE;
     vTaskDelay( (DELAY_TASK_2 * 1.5) / portTICK_PERIOD_MS ); // wait for 200ms
     taskTwoPlays++;
-    if (taskTwoPlays == 1) {
-      Serial.println("Average Wall Clock Time Per FFT: 68ms");
-    }
     if (taskTwoPlays == 3) {
       currentState = INIT_STATE;
       vTaskSuspend(NULL);
