@@ -7,6 +7,10 @@
 #include <Arduino_FreeRTOS.h>
 #include <LiquidCrystal.h>
 #include <Keypad.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <arduinoFFT.h>
+#include <queue.h>
 
 // Task 1 and 2 defines
 #define DELAY_TASK_1 250
@@ -61,6 +65,11 @@
 #define EXIT_STATE 12
 #define IDLE_STATE 13
 
+// FFT Defines
+#define ARRAY_SIZE 64  // Size of random int array
+#define SERIAL_BITS 19200  // number of bits per second for serial communication
+#define TOTAL_FFT 5  // total number of FFT's to calculate
+
 // --------------- Variables --------------------
 
 // Keypad Variables
@@ -113,6 +122,30 @@ byte numberArray[] = {0, 0, 0, 0}; // Start at 0000
 // ISR Variables
 char TCNT2init= 130;
 
+// RT-3 FFT Variables
+typedef uint32_t TickTypet;
+const double sampling = 40;
+const uint8_t amplitude = 4;
+uint8_t exponent;
+const double startFrequency = 2;
+const double stopFrequency = 16.4;
+const double step_size = 0.1;
+double vReal[ARRAY_SIZE];
+double vImag[ARRAY_SIZE];
+
+arduinoFFT FFT = arduinoFFT(); /* Create FFT object */
+double (*arrayPtr)[ARRAY_SIZE];  // pointer to random int array
+long *timePtr;  // pointer to avg time for a FFT
+
+int numBlinks = 0;  // number of blink cycles
+int numSongs = 0;  // number of song cycles
+int numFFT = 0;  // number of FFT calculations 
+
+//  declare the Queue handles
+static QueueHandle_t    queue1;
+static QueueHandle_t    queue2;
+
+
 // Task Initializers
 void TaskBlink( void *pvParameters );
 void TaskSongPlay( void *pvParameters );
@@ -123,8 +156,9 @@ void TaskServo( void *pvParameters );
 // -------------------- Setup ---------------------------
 
 void setup() {
-  // Setup RT-3
-  //randomSeed(l);
+  // initialize serial communication at 19200 bits per second:
+  Serial.begin(SERIAL_BITS);
+  while (!Serial) ;  // wait for it to comeup
   
   //Setup for Seven Segment Display
   for (int i = 0; i < DIGITAL_LEN; i++) {
@@ -150,6 +184,24 @@ void setup() {
   TIMSK2 |= (1<<TOIE2);
   TCNT2 = TCNT2init;
 
+  // FFT setup
+  srand(0);  // Set rand seed
+  // initialize array in memory all set to random doubles
+  double d[ARRAY_SIZE] = {0};
+  arrayPtr = &d;  // intialize global array pointer to array d of random ints
+  
+  // Set FFT array values to random integers
+  for(int i = 0 ; i < ARRAY_SIZE ; i++ ) {
+    d[i] = rand();
+    // Serial.print("i: ");  Serial.print(i);  Serial.print("   num: ");  Serial.println(d[i]);
+  }
+
+  exponent = FFT.Exponent(ARRAY_SIZE);
+
+  //  Set up Queues
+  queue1 = xQueueCreate(ARRAY_SIZE, sizeof(double));
+  queue2 = xQueueCreate(ARRAY_SIZE, sizeof(double));
+    
   // Now set up two tasks to run independently.
   xTaskCreate(
     TaskBlink
@@ -182,6 +234,22 @@ void setup() {
     ,  NULL
     ,  1  // Priority
     ,  NULL );
+
+//  xTaskCreate(
+//    TaskSetupFFT
+//    ,  "SetupFFT"
+//    ,  2000  // Stack size
+//    ,  NULL
+//    ,  0  // Priority
+//    ,  NULL );
+//
+//  xTaskCreate(
+//    TaskFFT
+//    ,  "FFT"
+//    ,  2000  // Stack size
+//    ,  NULL
+//    ,  0  // Priority
+//    ,  NULL );
 
   delay(500);
   
@@ -431,6 +499,58 @@ void TaskServo(void *pvParameters) {
       deposit = false;
       withdrawal = false;
     }
+  }
+}
+
+/*
+  SetupFFT
+  Creates an array of random integers and a FreeRTOS Queue
+*/
+void TaskSetupFFT(void *pvParameters) {
+  
+  // put into queue
+  xQueueSendToBack(queue1, arrayPtr, 0);
+
+  // take out from queue
+  xQueueReceive(queue2, &timePtr, 0);
+
+//  long avgTime = *timePtr / TOTAL_FFT;
+//  Serial.print("Average Wall Clock Time Per FFT: ");  Serial.println(avgTime);  // Prints time to calculate FFT's
+}
+
+/*
+  FFT
+  Caclculates 5 FFT's for an array of random integers from a FreeRTOS Queue
+*/
+void TaskFFT(void *pvParameters) {
+  vTaskDelay( 200 / portTICK_PERIOD_MS ); // wait for 200 ms
+  TickTypet xStart, xEnd, xDifference;
+  xStart = xTaskGetTickCount();
+  for (;;) {
+    numFFT++;  // number of FFT's calculated
+    xQueueReceive(queue1, &arrayPtr, 0);
+    for (int i = 0; i < TOTAL_FFT; i++) {  // stop after 5 FFT's
+      for(double frequency = startFrequency; frequency<=stopFrequency; frequency+=step_size)
+      {
+        // Build raw data 
+        double cycles = (((ARRAY_SIZE-1) * frequency) / sampling);
+        for (uint16_t i = 0; i < ARRAY_SIZE; i++)
+        {
+          vReal[i] = *arrayPtr[i];
+          vImag[i] = 0; //Reset the imaginary values vector for each new frequency
+        }
+        FFT.Windowing(vReal, ARRAY_SIZE, FFT_WIN_TYP_HAMMING, FFT_FORWARD);  // Weigh data
+        FFT.Compute(vReal, vImag, ARRAY_SIZE, exponent, FFT_FORWARD); // Compute FFT 
+        FFT.ComplexToMagnitude(vReal, vImag, ARRAY_SIZE); // Compute magnitudes
+        double x = FFT.MajorPeak(vReal, ARRAY_SIZE, sampling);
+      }
+    }
+    xEnd = xTaskGetTickCount();
+    xDifference = xEnd - xStart;
+    timePtr = &xDifference;
+    long avgTime = xDifference / TOTAL_FFT;
+    Serial.print("Average Wall Clock Time Per FFT: ");  Serial.println(avgTime);  // Prints time to calculate FFT's
+    xQueueSendToBack(queue2, timePtr, 0);
   }
 }
 
