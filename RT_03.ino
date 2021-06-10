@@ -46,7 +46,7 @@ typedef uint32_t TickTypet;
 #define SONG_STOP 3  // play song 3 times before stopping
 
 // Task 3/4 defines
-#define ARRAY_SIZE 64  // Size of random int array
+#define ARRAY_SIZE 128  // Size of random int array
 #define SERIAL_BITS 19200  // number of bits per second for serial communication
 #define TOTAL_FFT 5  // total number of FFT's to calculate
 
